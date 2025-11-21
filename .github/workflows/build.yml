@@ -71,14 +71,25 @@ jobs:
         shell: bash
         run: |
           FILE=$(find core/target/pit-reports -name "*.html" | head -1)
+          echo "Fichier HTML trouvé : $FILE"
+      
           if [ -z "$FILE" ]; then
+            echo "Aucun fichier HTML trouvé, score=0"
             echo "score=0" >> $GITHUB_OUTPUT
             exit 0
           fi
-          SCORE=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
+      
+          # Extraire n'importe quel pourcentage (ex: 75%)
+          SCORE=$(grep -oP '[0-9]+(?=%)' "$FILE" | head -1)
+      
+          if [ -z "$SCORE" ]; then
+            echo "Impossible d'extraire le score, score=0"
+            echo "score=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+      
           echo "score=$SCORE" >> $GITHUB_OUTPUT
           echo "Mutation score détecté = $SCORE%"
-
 
       # ---------------------------------------------------
       # 6) Upload rapport PIT
