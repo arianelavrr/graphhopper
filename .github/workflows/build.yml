@@ -129,15 +129,27 @@ jobs:
         id: prev
         shell: bash
         run: |
-          FILE=$(find previous -name index.html | head -1)
+          FILE=$(find previous -name "*.html" | head -1)
+          echo "Fichier HTML précédent trouvé : $FILE"
+      
           if [ -z "$FILE" ]; then
             echo "score=0" >> $GITHUB_OUTPUT
             echo "Aucun score précédent — première exécution."
-          else
-            PREV=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
-            echo "score=$PREV" >> $GITHUB_OUTPUT
-            echo "Ancien score = $PREV%"
+            exit 0
           fi
+      
+          # Extraire n’importe quel pourcentage
+          PREV=$(grep -oP '[0-9]+(?=%)' "$FILE" | head -1)
+      
+          if [ -z "$PREV" ]; then
+            echo "Impossible d'extraire l'ancien score, score=0"
+            echo "score=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+      
+          echo "score=$PREV" >> $GITHUB_OUTPUT
+          echo "Ancien score = $PREV%"
+
 
       - name: Compare mutation scores
         run: |
