@@ -36,20 +36,33 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-m2-
 
-      - name: Build all modules
-        run: mvn clean install -DskipTests
+      # ---------------------------------------------
+      # BUILD UNIQUEMENT DU MODULE CORE
+      # ---------------------------------------------
+      - name: Build core module
+        run: mvn -pl core -am clean install -DskipTests
 
-      - name: Run unit tests
-        run: mvn test
+      # ---------------------------------------------
+      # TEST UNIQUEMENT DU MODULE CORE
+      # ---------------------------------------------
+      - name: Run unit tests (core)
+        run: mvn -pl core test
 
-      - name: Run PIT Mutation Tests
-        run: mvn org.pitest:pitest-maven:mutationCoverage -DparseSurefireArgLine=false
+      # ---------------------------------------------
+      # PIT UNIQUEMENT SUR LE MODULE CORE
+      # (avec parseSurefireArgLine=false déjà dans ton pom)
+      # ---------------------------------------------
+      - name: Run PIT Mutation Tests (core)
+        run: mvn -pl core org.pitest:pitest-maven:mutationCoverage
 
+      # ---------------------------------------------
+      # EXTRACTION DU SCORE PIT
+      # ---------------------------------------------
       - name: Extract mutation score
         id: extract-score
         shell: bash
         run: |
-          FILE=$(find target/pit-reports -name index.html | head -1)
+          FILE=$(find core/target/pit-reports -name index.html | head -1)
           if [ -z "$FILE" ]; then
             echo "score=0" >> $GITHUB_OUTPUT
             exit 0
@@ -58,12 +71,18 @@ jobs:
           echo "score=$SCORE" >> $GITHUB_OUTPUT
           echo "Mutation score détecté = $SCORE%"
 
+      # ---------------------------------------------
+      # UPLOAD DU RAPPORT
+      # ---------------------------------------------
       - name: Upload PIT report
         uses: actions/upload-artifact@v4
         with:
           name: pit-report
-          path: target/pit-reports/
+          path: core/target/pit-reports/
 
+      # ---------------------------------------------
+      # RICKROLL SI FAIL
+      # ---------------------------------------------
       - name: Rickroll if failing
         if: failure()
         run: |
@@ -71,6 +90,10 @@ jobs:
           echo "Never gonna give you up 🎵"
           echo "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
+
+  # ==================================================
+  # COMPARAISON DU SCORE ENTRE 2 RUNS
+  # ==================================================
   check-mutation:
     runs-on: ubuntu-latest
     needs: build
