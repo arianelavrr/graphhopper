@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java-version: [ '24', '25-ea' ]
+          java-version: [ '24', '25-ea' ]
 
     outputs:
       mutation-score: ${{ steps.extract-score.outputs.score }}
@@ -32,68 +32,62 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          key: ${{ runner.os }}-m2-${{ hashFiles('core/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-m2-
 
-      # ---------------------------------------------
-      # BUILD UNIQUEMENT DU MODULE CORE
-      # ---------------------------------------------
+      # --------------------------------
+      # BUILD UNIQUEMENT DANS /core
+      # --------------------------------
       - name: Build core module
-        run: mvn -pl core -am clean install -DskipTests
+        working-directory: core
+        run: mvn clean install -DskipTests
 
-      # ---------------------------------------------
-      # TEST UNIQUEMENT DU MODULE CORE
-      # ---------------------------------------------
+      # --------------------------------
+      # TEST UNIQUEMENT /core
+      # --------------------------------
       - name: Run unit tests (core)
-        run: mvn -pl core test
+        working-directory: core
+        run: mvn test
 
-      # ---------------------------------------------
-      # PIT UNIQUEMENT SUR LE MODULE CORE
-      # (avec parseSurefireArgLine=false déjà dans ton pom)
-      # ---------------------------------------------
+      # --------------------------------
+      # PIT UNIQUEMENT /core
+      # --------------------------------
       - name: Run PIT Mutation Tests (core)
-        run: mvn -pl core org.pitest:pitest-maven:mutationCoverage
+        working-directory: core
+        run: mvn org.pitest:pitest-maven:mutationCoverage
 
-      # ---------------------------------------------
-      # EXTRACTION DU SCORE PIT
-      # ---------------------------------------------
+      # --------------------------------
+      # EXTRACTION DU SCORE
+      # --------------------------------
       - name: Extract mutation score
         id: extract-score
         shell: bash
         run: |
           FILE=$(find core/target/pit-reports -name index.html | head -1)
           if [ -z "$FILE" ]; then
-            echo "score=0" >> $GITHUB_OUTPUT
-            exit 0
+              echo "score=0" >> $GITHUB_OUTPUT
+              exit 0
           fi
           SCORE=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
           echo "score=$SCORE" >> $GITHUB_OUTPUT
-          echo "Mutation score détecté = $SCORE%"
 
-      # ---------------------------------------------
-      # UPLOAD DU RAPPORT
-      # ---------------------------------------------
+      # --------------------------------
+      # UPLOAD RAPPORT
+      # --------------------------------
       - name: Upload PIT report
         uses: actions/upload-artifact@v4
         with:
           name: pit-report
           path: core/target/pit-reports/
 
-      # ---------------------------------------------
-      # RICKROLL SI FAIL
-      # ---------------------------------------------
       - name: Rickroll if failing
         if: failure()
         run: |
           echo "❌ Tests ou mutation échoués!"
-          echo "Never gonna give you up 🎵"
           echo "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 
-  # ==================================================
-  # COMPARAISON DU SCORE ENTRE 2 RUNS
-  # ==================================================
   check-mutation:
     runs-on: ubuntu-latest
     needs: build
@@ -112,12 +106,10 @@ jobs:
         run: |
           FILE=$(find previous -name index.html | head -1)
           if [ -z "$FILE" ]; then
-            echo "score=0" >> $GITHUB_OUTPUT
-            echo "Aucun score précédent — première exécution."
+              echo "score=0" >> $GITHUB_OUTPUT
           else
-            PREV=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
-            echo "score=$PREV" >> $GITHUB_OUTPUT
-            echo "Ancien score = $PREV%"
+              PREV=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
+              echo "score=$PREV" >> $GITHUB_OUTPUT
           fi
 
       - name: Compare mutation scores
@@ -125,14 +117,9 @@ jobs:
           CUR=${{ needs.build.outputs.mutation-score }}
           PREV=${{ steps.prev.outputs.score }}
 
-          echo "Score précédent : $PREV%"
-          echo "Score actuel    : $CUR%"
-
           if [ "$PREV" != "0" ] && [ "$CUR" -lt "$PREV" ]; then
-            echo "Mutation score decreased ❌"
-            exit 1
-          else
-            echo "Mutation score OK ✔"
+              echo "Mutation score decreased ❌"
+              exit 1
           fi
 
 
