@@ -1,41 +1,129 @@
-name: Java CI
+name: Build, Test, Mutation & Rickroll
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
-  build:
 
+  build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java-version: [ '24', '25-ea' ]
+
+    outputs:
+      mutation-score: ${{ steps.extract-score.outputs.score }}
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up JDK 17
-      uses: actions/setup-java@v3
-      with:
-        distribution: temurin
-        java-version: 17
-        cache: maven
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ matrix.java-version }}
+          distribution: temurin
 
-    # Étape obligatoire pour les projets multi-modules :
-    # on build TOUT le projet pour que les modules puissent
-    # se trouver les uns les autres.
-    - name: Build all modules (clean install)
-      run: mvn -B clean install -DskipTests
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-m2-
 
-    # Maintenant que les snapshots sont installés, on peut lancer les tests.
-    - name: Run unit tests
-      run: mvn -B test
+      - name: Cache Node
+        uses: actions/cache@v4
+        with:
+          path: web-bundle/node
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
 
-    # PIT est optionnel.
-    # Si tu veux l'activer, décommente les 4 lignes ci-dessous.
-    # - name: Run PIT mutation testing
-    #   run: mvn -B org.pitest:pitest-maven:mutationCoverage
+      - name: Cache Node Modules
+        uses: actions/cache@v4
+        with:
+          path: web-bundle/node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Build & Test
+        run: mvn -B clean test
+
+      - name: Run PIT Mutation Tests
+        run: mvn -B -DskipTests=false org.pitest:pitest-maven:mutationCoverage
+
+      - name: Extract mutation score
+        id: extract-score
+        shell: bash
+        run: |
+          FILE=$(find target/pit-reports -name index.html | head -1)
+          if [ -z "$FILE" ]; then
+            echo "score=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          SCORE=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "Mutation score détecté = $SCORE%"
+
+      - name: Upload PIT report
+        uses: actions/upload-artifact@v4
+        with:
+          name: pit-report
+          path: target/pit-reports/
+
+      - name: Rickroll if failing
+        if: failure()
+        run: |
+          echo "❌ Tests ou mutators échoués!"
+          echo "Never gonna give you up 🎵"
+          echo "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+  check-mutation:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Download previous PIT report
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: pit-report
+          path: previous/
+
+      - name: Extract previous score
+        id: prev
+        shell: bash
+        run: |
+          FILE=$(find previous -name index.html | head -1)
+          if [ -z "$FILE" ]; then
+            echo "score=0" >> $GITHUB_OUTPUT
+            echo "Aucun score précédent — première exécution."
+          else
+            PREV=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
+            echo "score=$PREV" >> $GITHUB_OUTPUT
+            echo "Ancien score = $PREV%"
+          fi
+
+      - name: Compare mutation scores
+        run: |
+          CUR=${{ needs.build.outputs.mutation-score }}
+          PREV=${{ steps.prev.outputs.score }}
+
+          echo "Score précédent : $PREV%"
+          echo "Score actuel    : $CUR%"
+
+          if [ "$PREV" != "0" ] && [ "$CUR" -lt "$PREV" ]; then
+            echo "Mutation score decreased ❌"
+            exit 1
+          else
+            echo "Mutation score OK ✔"
+          fi
 
 
 
