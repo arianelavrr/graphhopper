@@ -1,0 +1,125 @@
+Par : Léa Hemidj et Ariane Laverrière
+
+L’objectif de cette tâche était de modifier le workflow GitHub Actions du projet GraphHopper de manière à ce que 
+le processus de build échoue automatiquement lorsque le score de mutation diminue, que les tests de mutation PIT 
+soient exécutés correctement et rapidement, qu''un Rickroll soit déclenché en cas d’échec et que tout soit documenté 
+et justifié. Le projet GraphHopper comprenant de nombreux modules, il était nécessaire d’adapter le pipeline pour 
+réduire considérablement le temps d’exécution tout en conservant l’intégrité des tests.
+
+Nous avons configuré Github Actions pour exécuter les tests unitaires et les tests de mutation PIT, extraire le score
+de mutation généré par PIT, ensuite comparer ce score avec le score obtenu lors de l’exécution précédente du workflow,
+puis faire échouer le build si le score baisse après un commit tout en déclenchant un Rickroll en cas d’échec.
+On voulait aussi garder un pipeline rapide, fiable et adapté à GraphHopper.
+
+Choix d''architecture et justification:
+
+1. On a choisi d''exécuter PIT seulement sur le module core, car GraphHopper est composé de nombreux modules 
+(core, web, tools, map-matching, navigation, etc.). Lancer PIT sur l’ensemble du projet aurait été extrêmement long 
+(souvent plus de 20 minutes). Pour obtenir un pipeline performant tout en répondant aux exigences du travail, nous avons 
+choisi de cibler uniquement le module core, qui contient : AStar (dans routing), CustomWeighting 
+(dans routing/weighting/custom) et l’essentiel de la logique algorithmique pertinente pour nos tests. Ce choix permet d''avoir
+une exécution PIT ultra rapide (< 1 minute), une forte cohérence avec les classes testées, et un pipeline beaucoup plus léger.
+Ce choix répond directement à la nécessité de garder un workflow fonctionnel sans saturer les “minutes CI”.
+
+2. Correction du problème ${argLine} qui faisait planter PIT:
+
+Dans GraphHopper, le pom parent intègre une configuration Surefire utilisant : <argLine>@{argLine}</argLine>, PIT interprète
+littéralement cette chaîne, ce qui provoque une erreur : NoSuchFileException: {argLine} MINION DIED. Ce problème est connu 
+dans les projets qui utilisent Surefire + PIT. Pour corriger cela, nous avons ajouté dans le pom.xml du module core :
+<parseSurefireArgLine>false</parseSurefireArgLine> et forcé une valeur vide dans le workflow : mvn -f core/pom.xml -DargLine="".
+Cela empêche PIT de réutiliser la configuration Surefire et élimine complètement les erreurs MINION liées aux sous-processus PIT.
+
+3. Extraction du score de mutation :
+
+Nous avons choisi une approche universelle, extraire le premier pourcentage présent dans le rapport : grep -oP '[0-9]+(?=%)'.
+Cette méthode est compatible avec toutes les versions PIT et tous les formats de rapport et réduit à zéro les risques de crash 
+dans l’étape d’extraction.
+
+4. Comparaison entre ancien score et nouveau score
+Le workflow enregistre le rapport PIT à chaque exécution avec upload-artifact, puis le télécharge au run suivant avec 
+download-artifact. Une fois extrait, PREV contient le score précédent et CUR contient le score actuel. La comparaison est 
+simple et efficace :
+if [ "$PREV" != "0" ] && [ "$CUR" -lt "$PREV" ]; then
+    exit 1
+fi
+Si le score actuel a diminué : le workflow échoue.
+S''il est stable ou augmente : le workflow passe.
+
+5. Rickroll automatique en cas d’échec
+En cas de failure, GitHub Actions affiche automatiquement :
+Never gonna give you up 🎵
+https://www.youtube.com/watch?v=dQw4w9WgXcQ
+On aurait pu choisir un custom, mais on voulait y aller avec un classique.
+
+Validation du workflow (tests effectués):
+
+Pour s’assurer que le workflow fonctionne dans toutes les situations, plusieurs validations ont été réalisées.
+- Test 1 — Première exécution
+  - Aucun rapport précédent disponible.
+  - Le workflow doit passer.
+  - Score précédent automatiquement sauvegardé.
+  Il fonctionne parfaitement.
+- Test 2 — Score stable
+  - Aucune modification dans les tests.
+  - Score inchangé.
+  Le workflow passe.
+- Test 3 — Score en baisse
+  - Nous avons volontairement désactivé un test pour provoquer une diminution.
+  - Résultat :
+    le workflow échoue et le message "Mutation score decreased" apparaît, un Rickroll est affiché.
+  Exactement le comportement demandé.
+- Test 4 — Aucun fichier PIT généré
+  - Rare, mais possible, donc on devait le tester.
+  - Le workflow détecte l’absence d’index.html et renvoie :
+    score=0
+  Sans planter.
+
+Les mocks :
+
+Nous avons ajouté deux nouveaux tests unitaires utilisant la bibliothèque Mockito afin de simuler des composants importants 
+de GraphHopper. L’objectif était d’introduire au moins deux classes de test, chacune utilisant des mocks pour simuler plusieurs
+dépendances. Les deux tests ajoutés sont : CustomWeightingMockTest.java et AStarMockTest.java. Ces tests intègrent chacun 
+plusieurs mocks et visent à valider le comportement logique des composants sans nécessiter un graphe complet, des fichiers 
+OSM ou une initialisation lourde du moteur GraphHopper.
+
+CustomWeighting est l’un des éléments centraux du système de pondération des arêtes. C’est un composant critique puisqu’il 
+détermine le coût utilisé par A*, Dijkstra et tous les algorithmes de recherche de chemin. Plus spécifiquement, il combine 
+vitesse, priorité, distance, pénalités, etc., il reçoit plusieurs callbacks/mappings dynamiques pour calculer ces coûts et il
+est utilisé dans plusieurs custom profils. Tester cette classe permet donc d''améliorer la robustesse du moteur de routing.
+
+AStar est un des algorithmes principaux de recherche de chemin dans GraphHopper. Il dépend d’un Graph, d’une Weighting et d’un 
+TraversalMode. Tester AStar permet d’assurer que les composants centraux du routage fonctionnent ou, dans ce cas, que les 
+interactions avec les dépendances simulées fonctionnent correctement.
+
+Pour CustomWeightingMockTest, CustomWeighting dépend de plusieurs objets complexes, voici celles qu''on a choisi de mock ainsi
+que la raison: 
+  - CustomWeighting.EdgeToDoubleMapping  -> évite d’avoir à initialiser un graphe complet
+  - CustomWeighting.MaxCalc -> simulation des règles de calcul de vitesse et priorité maximales
+  - TurnCostProvider ->	normalement utilisé pour calculer les coûts de virage, mais était inutile pour ce test
+  - EdgeIteratorState -> une vraie arête nécessite un graphe entier, donc on la mock
+Ces 6 mocks permettent d''isoler CustomWeighting.calcEdgeWeight(...) sans dépendre de GraphHopper dans son intégralité.
+
+Pour AStarMockTest, AStar dépend d’un graphe complet et d’une pondération valide. Pour les mêmes raisons, on mock :
+  - Graph	-> impossible d’instancier un vrai graphe léger sans importer des fichiers OSM
+  - Weighting -> permet d’imposer un coût fixe pour vérifier que l’algorithme reçoit les bonnes valeurs
+  - EdgeIteratorState	-> utilisé pour enrichir le test sans créer de structure réelle
+Ces mocks permettent de vérifier que l’algorithme AStar manipule correctement la pondération fournie.
+
+Dans CustomWeightingMockTest, on a un Mock important :
+  when(edgeToPriorityMapping.get(edge, false)).thenReturn(1.0);
+Sans cette ligne, CustomWeighting déclenche une NullPointerException car la priorité est essentielle dans le calcul du poids.
+Les valeurs simulées sont :
+  - edge.getDistance() -> 100.0
+  - priorité -> 1.0
+  - autres callbacks simples
+  - pas de pénalités de direction (0.0), pour isoler le test
+Nous avons choisi celles-ci, car l’objectif n’est pas de tester la logique du profil complet mais de vérifier que 
+CustomWeighting.calcEdgeWeight() fonctionne dans un contexte simulé et de garantir qu’il retourne un poids valide tout en 
+évitant les dépendances lourdes (graphes, chargement de données).
+
+Dans AStarMockTest, on a un Mock essentiel :
+  when(weighting.calcEdgeWeight(any(), anyBoolean())).thenReturn(5.0);
+Cela assure que AStar utilisera un coût constant, qu''on peut vérifier que le mock est correctement utilisé et qu''on découple
+AStar des structures internes du graphe. Nous avons choisi ceci, car AStar.calcPath() est extrêmement complexe et nécessite 
+un graphe réel. Ce test ne cherche pas à valider toute la logique du routing, mais seulement à s’assurer que la pondération 
+est correct et bien utilisée et à tester AStar dans un environnement minimal contrôlé.
