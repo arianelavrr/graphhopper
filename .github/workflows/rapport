@@ -19,7 +19,6 @@ Choix d''architecture et justification:
 choisi de cibler uniquement le module core, qui contient : AStar (dans routing), CustomWeighting 
 (dans routing/weighting/custom) et l’essentiel de la logique algorithmique pertinente pour nos tests. Ce choix permet d''avoir
 une exécution PIT ultra rapide (< 1 minute), une forte cohérence avec les classes testées, et un pipeline beaucoup plus léger.
-Ce choix répond directement à la nécessité de garder un workflow fonctionnel sans saturer les “minutes CI”.
 
 2. Correction du problème ${argLine} qui faisait planter PIT:
 
