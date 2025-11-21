@@ -103,7 +103,7 @@
                 <exclusion>
                     <groupId>org.jetbrains.kotlin</groupId>
                     <artifactId>kotlin-stdlib-jdk8</artifactId>
-                </exclude>
+                </exclusion>
             </exclusions>
         </dependency>
 
