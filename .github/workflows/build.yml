@@ -70,7 +70,7 @@ jobs:
         id: extract-score
         shell: bash
         run: |
-          FILE=$(find core/target/pit-reports -name index.html | head -1)
+          FILE=$(find core/target/pit-reports -name "*.html" | head -1)
           if [ -z "$FILE" ]; then
             echo "score=0" >> $GITHUB_OUTPUT
             exit 0
@@ -78,6 +78,7 @@ jobs:
           SCORE=$(grep -oP '(?<=Mutation Coverage<\/td><td>)[0-9]+' "$FILE" | head -1)
           echo "score=$SCORE" >> $GITHUB_OUTPUT
           echo "Mutation score détecté = $SCORE%"
+
 
       # ---------------------------------------------------
       # 6) Upload rapport PIT
