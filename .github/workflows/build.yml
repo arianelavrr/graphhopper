@@ -36,27 +36,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-m2-
 
-      - name: Cache Node
-        uses: actions/cache@v4
-        with:
-          path: web-bundle/node
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      - name: Build all modules
+        run: mvn clean install -DskipTests
 
-      - name: Cache Node Modules
-        uses: actions/cache@v4
-        with:
-          path: web-bundle/node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
-
-      - name: Build & Test
-        run: mvn -B clean test
+      - name: Run unit tests
+        run: mvn test
 
       - name: Run PIT Mutation Tests
-        run: mvn -B -DskipTests=false org.pitest:pitest-maven:mutationCoverage
+        run: mvn org.pitest:pitest-maven:mutationCoverage
 
       - name: Extract mutation score
         id: extract-score
@@ -80,7 +67,7 @@ jobs:
       - name: Rickroll if failing
         if: failure()
         run: |
-          echo "❌ Tests ou mutators échoués!"
+          echo "❌ Tests ou mutation échoués!"
           echo "Never gonna give you up 🎵"
           echo "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
