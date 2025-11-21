@@ -43,7 +43,7 @@ jobs:
         run: mvn test
 
       - name: Run PIT Mutation Tests
-        run: mvn org.pitest:pitest-maven:mutationCoverage
+        run: mvn org.pitest:pitest-maven:mutationCoverage -DparseSurefireArgLine=false
 
       - name: Extract mutation score
         id: extract-score
