@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java-version: [ '17' ]   # 🔥 Ultra rapide, stable, supporté
+        java-version: [ '17' ]   # plus rapide
 
     outputs:
       mutation-score: ${{ steps.extract-score.outputs.score }}
@@ -36,36 +36,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-m2-
 
-      # ---------------------------------------------------
-      # 1) Installer les modules nécessaires pour /core
-      # ---------------------------------------------------
+      # installer les modules nécessaires pour /core
       - name: Install parent + modules (dependencies only)
         run: mvn -q -DskipTests install
 
-      # ---------------------------------------------------
-      # 2) Build uniquement core
-      # ---------------------------------------------------
+      # build uniquement core
       - name: Build core module
         working-directory: core
         run: mvn clean install -DskipTests
 
-      # ---------------------------------------------------
-      # 3) Tests uniquement core
-      # ---------------------------------------------------
+      # tests uniquement core
       - name: Run unit tests (core)
         working-directory: core
         run: mvn test
 
-      # ---------------------------------------------------
-      # 4) PIT uniquement core
-      # ---------------------------------------------------
+      # PIT uniquement core
       - name: Run PIT Mutation Tests (core)
         working-directory: core
         run: mvn org.pitest:pitest-maven:mutationCoverage
 
-      # ---------------------------------------------------
-      # 5) Extraction du score
-      # ---------------------------------------------------
+      # extraction du score
       - name: Extract mutation score
         id: extract-score
         shell: bash
@@ -79,7 +69,7 @@ jobs:
             exit 0
           fi
       
-          # Extraire n'importe quel pourcentage (ex: 75%)
+          # extraire n'importe quel pourcentage (ex: 75%)
           SCORE=$(grep -oP '[0-9]+(?=%)' "$FILE" | head -1)
       
           if [ -z "$SCORE" ]; then
@@ -91,28 +81,22 @@ jobs:
           echo "score=$SCORE" >> $GITHUB_OUTPUT
           echo "Mutation score détecté = $SCORE%"
 
-      # ---------------------------------------------------
-      # 6) Upload rapport PIT
-      # ---------------------------------------------------
+      # upload rapport PIT
       - name: Upload PIT report
         uses: actions/upload-artifact@v4
         with:
           name: pit-report
           path: core/target/pit-reports/
 
-      # ---------------------------------------------------
-      # 7) Rickroll si fail
-      # ---------------------------------------------------
+      # Rickroll si fail
       - name: Rickroll if failing
         if: failure()
         run: |
-          echo "❌ Tests ou mutation échoués!"
+          echo "Tests ou mutation échoués"
           echo "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 
-  # ==================================================
   # COMPARAISON DES SCORES
-  # ==================================================
   check-mutation:
     runs-on: ubuntu-latest
     needs: build
@@ -134,11 +118,11 @@ jobs:
       
           if [ -z "$FILE" ]; then
             echo "score=0" >> $GITHUB_OUTPUT
-            echo "Aucun score précédent — première exécution."
+            echo "Aucun score précédent première exécution."
             exit 0
           fi
       
-          # Extraire n’importe quel pourcentage
+          # extraire n’importe quel pourcentage
           PREV=$(grep -oP '[0-9]+(?=%)' "$FILE" | head -1)
       
           if [ -z "$PREV" ]; then
@@ -160,10 +144,10 @@ jobs:
           echo "Score actuel    : $CUR%"
 
           if [ "$PREV" != "0" ] && [ "$CUR" -lt "$PREV" ]; then
-            echo "Mutation score decreased ❌"
+            echo "Mutation score decreased"
             exit 1
           else
-            echo "Mutation score OK ✔"
+            echo "Mutation score ok"
           fi
 
 
