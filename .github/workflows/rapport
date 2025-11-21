@@ -46,8 +46,8 @@ S''il est stable ou augmente : le workflow passe.
 
 5. Rickroll automatique en cas d’échec
 En cas de failure, GitHub Actions affiche automatiquement :
-Never gonna give you up 🎵
-https://www.youtube.com/watch?v=dQw4w9WgXcQ
+          echo "Tests ou mutation échoués"
+          echo "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 On aurait pu choisir un custom, mais on voulait y aller avec un classique.
 
 Validation du workflow (tests effectués):
