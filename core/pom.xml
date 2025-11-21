@@ -175,7 +175,7 @@
                     <version>3.1.2</version>
                 </plugin>
 
-                <!-- 🔥 PIT CIBLÉ UNIQUEMENT POUR TES DEUX CLASSES -->
+                <!-- PIT seulement sur nos 2 classes -->
                 <plugin>
                     <groupId>org.pitest</groupId>
                     <artifactId>pitest-maven</artifactId>
@@ -184,13 +184,13 @@
                     <configuration>
                         <parseSurefireArgLine>false</parseSurefireArgLine>
 
-                        <!-- MUTATION UNIQUEMENT DE TES CLASSES -->
+                        <!-- mutation seuelement sur nos classes -->
                         <targetClasses>
                             <param>com.graphhopper.routing.AStar</param>
                             <param>com.graphhopper.routing.weighting.custom.CustomWeighting</param>
                         </targetClasses>
 
-                        <!-- TESTS CIBLÉS -->
+                        <!-- tests ciblés -->
                         <targetTests>
                             <param>com.graphhopper.routing.AStarMockTest</param>
                             <param>com.graphhopper.routing.weighting.custom.CustomWeightingMockTest</param>
